@@ -1,0 +1,368 @@
+-- Criar Projeto ---
+
+nest new devtraining
+
+-- Controller ---
+
+nest g controller courses - Já atualiza automaticamente o app.module quando criado por meio da CLI do NEST
+
+nest g controller courses --no-spec  - Cria o controller sem o arquivo de testes
+
+nest g controller module/courses - Permite que o controller seja criado em outra pasta
+
+nest g controller --dry-run  - Permite que seja possível visualizar como ficaria a estrutura se criada dessa maneira
+
+nest g controller module/courses --no-spec --dry-run  - É possível encadear parâmetros e utilizá-los juntos
+
+É possível observar o mapeamento das rotas nos logs do Nest
+
+Os métodos do controller devem ter um decorator com o verbe referente a rota
+
+Exemplo:
+
+  @Get('list') - Exemplo de rota /list com verbo @Get
+  findAll() {
+    return 'Listagem de cursos';
+  }
+
+@Param() - Indica que um parâmetro será passado pela própria URL
+
+Exemplo: /courses/1
+
+O 1 é o parâmetro
+
+Deve ser incluido dentro dos parâmetros da função do controller
+
+Exemplo:
+
+  @Get('/:id')
+  findOne(@Param() params) { - Pega lista de parâmetros
+    return `Curso #${params.id}`;
+  }
+
+  @Get('/:id')
+  findOne(@Param('id') id: number) { - Pega parâmetro específico da rota
+    // @Param('id') define que somente o parâmetro id será pego
+    return `Curso #${id}`;
+  }
+
+
+O decorator @HttpCode indica qual será o status codes que será retornado na requisição
+
+Exemplo:
+
+  @Post()
+  @HttpCode(HttpStatus.NO_CONTENT) // Define qual é o status de resposta
+  create(@Body() body) {
+    return body;
+  }
+
+-- Service ---
+
+nest g service course
+
+Os services são integrados com os Controller por meio do constructor de cada controller
+
+Exemplo:
+
+@Controller('courses')
+export class CoursesController {
+  constructor(private readonly coursesService: CoursesService) {
+    // é readonly porque não precisa nunca ser redefinido e private porque só sera utilizado internamente pela própria classe
+  }
+
+nest g module courses
+
+Criar módulo
+
+A organização ideal da estrutura do NEST deve ser feita por meio de módulos, onde os módulos importam os controllers e services das classes, e o módulo app (principal da aplicação) importa somente os módulos. Importação de service e controllers NÃO DEVE SER FEITA, JAMAIS, DENTRO DO MÓDULO PRINCIPAL DA APLICAÇÃO.
+
+DTO - É uma interface ou classe que define quais dados devem ser enviados/recebidos em cada tipo de requisição. o DTO vira um type para cada tipo de operação.
+
+Criação de classe que será DTO: 
+
+nest g class courses/dto/create-course.dto --no-spec 
+
+Exemplo de DTO:
+
+export class CreateCourseDto {
+  name: string;
+  description: string;
+  tags: string[];
+}
+
+Em uma requisição create (POST), não esperamos receber um id, então o DTO para criação, contem apenas as informações pertinentes no processo de criação de um course.
+
+DTOs são objetos simples usados para tipar os dados (payload), não contém nenhum lógica de negócios e não contém métodos. É uma classe que não precisa ser testada.
+
+Como os dados dos DTOs não são manipulados, os atributos devem ser definidos como readonly, para trazer mais SEGURANÇA para a aplicação.
+
+No caso de um DTO com atributos opcionais, os campos que não são obrigatórios devem ser marcados com "?"
+
+export class UpdateCourseDto {
+  readonly name?: string;
+  readonly description?: string;
+  readonly tags?: string[];
+}
+
+-- Validação dos dados recebidos nas requisições ---
+
+O NEST possui nativamente um recurso responsável por validar dados em requisições, chamado de Pipes.
+
+Para habilitar os Pipes na aplicação.
+
+Ir no arquivo principal da aplicação (main.ts)
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalPipes(new ValidationPipe()); -- Adicionar essa linha e fazer as importações necessárias
+  await app.listen(3000);
+}
+
+É necessário utilizar duas bibliotecas auxiliares no processo de validação
+
+npm i class-validator class-transformer
+
+Os atributos dos DTOs devem receber um decorator informando quais validações necessárias devem ser feitas em cada atributo.
+
+Exemplo:
+
+  @IsString()
+  readonly name: string;
+
+  @IsString()
+  readonly description: string;
+
+  @IsString({ each: true }) // each: true - irá verificar se cada elemento do array é uma string
+  readonly tags: string[];
+
+Todos os decorators devem ser importados.
+
+O próprio class-validator já é responsável por retornar uma mensagem de erro personalizada e com status code apropriado.
+
+Exemplo de response:
+
+{
+    "statusCode": 400,
+    "message": [
+        "name must be a string"
+    ],
+    "error": "Bad Request"
+}
+
+Para não repetir validações parecidas, com mesmos atributos e validações semelhantes, por exemplo, createCourseDTO e updateCourseDTO, é possível utilizar um PartialType.
+
+npm i @nestjs/mapped-types
+
+export class UpdateCourseDto extends PartialType(CreateCourseDto) {}
+
+Nesse caso, ao usar PartialType(CreateCourseDTO) dentro da classe UpdateCourseDto, estamos herdando todos os atributos e validações do CreateCourseDto, porém, por ser um PartialType, estamos dizendo que os atributos são opcionais, PORÉM, é necessário que PELO MENOS um atributo seja enviado/recebido na requisição para ter sucesso.
+
+Porém, apenas com essa configuração, o UpdateCourseDto aceita receber atributos que não façam parte do DTO.
+
+Para evitar que isso aconteça, apenas é necessário adicionar à configuração do Validation Pipe, dentro do arquivo main.ts, o seguinte objeto de configuração:
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+    }),
+  );
+
+whitelist: true - Indica que somente atributos definidos nos DTOs serão recebidos pelo servidor. Outros atributos serão descartados.
+
+Receber requisições com atributos diferentes do esperado é uma coisa BEM PERIGOSA, então é possível bloquear requisições "fora dos padrões" adicionando mais um atributo ao objeto de configuração do ValidationPipe:
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+
+forbidNonWhitelisted: true - Indica que caso seja recebida uma requisição com algum atributo que não faça parte da "whitelist", a requisição será recusada pelo servidor, retornando um erro.
+
+Exemplo de response:
+
+{
+    "statusCode": 400,
+    "message": [
+        "property id should not exist",
+        "property irineu should not exist",
+        "name must be a string",
+        "each value in tags must be a string"
+    ],
+    "error": "Bad Request"
+}
+
+Mais um parâmetro deve ser adicionado ao ValidationPipe, pois o objeto recebido pela requisição não é tipado.
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+transform: true - Faz com que o objeto recebido seja TRANSFORMADO em um objeto tipado, de acordo com as tipagens definidas no DTO
+
+--- conexão com banco ---
+
+Para conectar com um banco de dados, é necessário ir até o módulo principal da aplicação e fazer algumas configurações. No caso do typeORM, é necessário instalar algumas dependências.
+
+Utilizando Postgres:
+
+npm i typeorm @nestjs/typeorm pg
+
+Rodar postgres em background
+
+docker run --name postgres -e POSTGRES_PASSWORD=docker -p 5432:5432 -d postgres
+
+docker start postgres
+
+Configuração necessária no app.module:
+
+
+@Module({
+  imports: [
+    CoursesModule,
+    TypeOrmModule.forRoot({
+      type: 'postgres',
+      host: 'localhost',
+      port: 5432,
+      username: 'postgres',
+      password: 'Lucas@36',
+      database: 'postgres',
+      autoLoadEntities: true,
+      synchronize: true, // NUNCA UTILIZAR ISSO EM PRODUÇÃO, NUNCA
+      // Faz com que tabelas, colunas sejão recriadas após alterações
+      // Deletando permanentemente os dados existentes
+    }),
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+
+Também é necessário fazer uma configuração em cada módulo da aplicação, setando qual o arquivo responsável por indicar a entity relacionada com o módulo:
+
+Exemplo no módulo de courses:
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Course])],
+  controllers: [CoursesController],
+  providers: [CoursesService],
+})
+
+A estrutura de um arquivo entity deve ser parecida com:
+
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+
+@Entity('Courses')
+export class Course {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string;
+
+  @Column()
+  description: string;
+
+  @Column('json', { nullable: true })
+  tags: string[];
+}
+
+--- Repository ---
+
+O Repository é responsável por permitir a realização de operações com o banco de dados por meio dos métodos que o ORM possui.
+
+Para utilizar o Repository, é necessário injetar o Repository em cada service que operações com o banco de dados serão feitas, e passar como parâmetro o arquivo de entity da classe.
+
+Exemplo:
+
+@Injectable()
+export class CoursesService {
+  constructor(
+    @InjectRepository(Course)
+    private readonly courseRepository: Repository<Course>,
+  ) {}
+
+
+Exemplo de operação no service utilizando repository:
+
+  findOne(id: string) {
+    const course = this.courseRepository.findOne(id);
+
+    if (!course) {
+      throw new NotFoundException(`Course Id #${id} not found`);
+    }
+
+    return course;
+  }
+
+--- Relations TypeORM ---
+
+eager - se setado como true, também carrega os dados da entidade relacionada
+
+cascade - boolean | ("insert" | "update")[]
+
+onDelete: "RESTRICT"|"CASCADE"|"SET NULL"
+
+@JoinTable() - Indica qual é a tabela à que pertence o relacionamento
+
+Exemplo de relacionamento ManyToMany
+
+Entidade Course:
+
+  @JoinTable()
+  @ManyToMany(() => Tag, (tag: Tag) => tag.courses)
+  tags: Tag[];
+
+Entidade Tag:
+
+  @ManyToMany(() => Course, (course: Course) => course.tags)
+  courses: Course[];
+
+É necessário adicionar ao módulo da classe a entidade que terá relacionamento com o módulo
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Course, Tag])],
+  controllers: [CoursesController],
+  providers: [CoursesService],
+})
+
+A pasta entities de uma classe pode conter outra entidade relacionada, caso faça sentido
+
+Exemplo: src -> courses -> entities -> course.entity.ts | tag.entity.ts
+
+CREATE !== SAVE
+
+Create - Prepara um objeto para ser inserido como entidade
+Save - Persiste o objeto no banco de dados
+
+--- Migrations Versão 2 TypeORM ---
+
+Criar arquivo chamado ormconfig.js na raíz do projeto
+
+Adicionar a seguinte configuração no arquivo
+
+module.exports = {
+  type: 'postgres',
+  host: 'localhost',
+  port: 5432,
+  username: 'postgres',
+  password: 'Lucas@36',
+  database: 'postgres',
+  entities: ['dist/**/*.entity.js'],
+  migrations: ['dist/migrations/*.js'],
+  cli: {
+    migrationsDir: 'src/migrations',
+  },
+};
+
+Rodar a migration caso não tenha o typeOrm CLI, é necessário utilizar o npx
+
+npx typeorm migration:create -n CourseRefactoring
+
+npx typeorm migration:run
+
