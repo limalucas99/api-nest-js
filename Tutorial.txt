@@ -366,3 +366,8 @@ npx typeorm migration:create -n CourseRefactoring
 
 npx typeorm migration:run
 
+entrypoint.sh - será executado assim que a máquina linux iniciar
+
+chmod +x .docker/entrypoint.sh - Comando para dar permissão de execução para o script shell
+
+sudo chmod -R 777 devtraining/
