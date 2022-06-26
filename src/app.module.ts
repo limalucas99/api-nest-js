@@ -9,13 +9,13 @@ import { CoursesModule } from './courses/courses.module';
     CoursesModule,
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: 'localhost',
+      host: 'db',
       port: 5432,
       username: 'postgres',
-      password: 'Lucas@36',
-      database: 'postgres',
+      password: 'docker',
+      database: 'cursonestjs',
       autoLoadEntities: true,
-      synchronize: true, // NUNCA UTILIZAR ISSO EM PRODUÇÃO, NUNCA
+      // synchronize: true, // NUNCA UTILIZAR ISSO EM PRODUÇÃO, NUNCA
     }),
   ],
   controllers: [AppController],
